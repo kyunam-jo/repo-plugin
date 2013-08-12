@@ -11,6 +11,10 @@
 		<f:textbox name="repo.manifestRepositoryUrl" value="${scm.manifestRepositoryUrl}"/>
 	</f:entry>
 
+	<f:entry title="Use krepo2 script" help="/plugin/repo/help-repo.html">
+        <f:checkbox name="repo.krepo" checked="${h.defaultToFalse(scm.krepo)}" />
+	</f:entry>
+
 	<f:advanced>
 
 		<f:entry title="Manifest Branch" help="/plugin/repo/help-manifestBranch.html">

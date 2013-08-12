@@ -79,6 +79,7 @@ public class RepoScm extends SCM {
 	private final String destinationDir;
 	private final boolean currentBranch;
 	private final boolean quiet;
+	private final boolean krepo;
 
 	/**
 	 * Returns the manifest repository URL.
@@ -165,6 +166,13 @@ public class RepoScm extends SCM {
 	}
 
 	/**
+	 * Returns the value of krepo.
+	 */
+	public boolean isKrepo() {
+		return krepo;
+	}
+
+	/**
 	 * The constructor takes in user parameters and sets them. Each job using
 	 * the RepoSCM will call this constructor.
 	 *
@@ -204,6 +212,9 @@ public class RepoScm extends SCM {
 	 * @param quiet
 	 * 			  if this value is true,
 	 *            add "-q" options when excute "repo sync".
+	 * @param krepo
+	 * 			  if this value is true,
+	 *            using krepo script when excute "repo sync".
 	 */
 	@DataBoundConstructor
 	public RepoScm(final String manifestRepositoryUrl,
@@ -212,7 +223,8 @@ public class RepoScm extends SCM {
             final String jobs,
 			final String localManifest, final String destinationDir,
             final String repoUrl,
-			final boolean currentBranch, final boolean quiet
+			final boolean currentBranch, final boolean quiet,
+            final boolean krepo
         ) {
 		this.manifestRepositoryUrl = manifestRepositoryUrl;
 		this.manifestBranch = Util.fixEmptyAndTrim(manifestBranch);
@@ -225,6 +237,7 @@ public class RepoScm extends SCM {
 		this.currentBranch = currentBranch;
 		this.quiet = quiet;
         this.repoUrl = Util.fixEmptyAndTrim(repoUrl);
+        this.krepo = krepo;
 	}
 
 	@Override
@@ -345,7 +358,7 @@ public class RepoScm extends SCM {
         String value;
 		debug.log(Level.FINE, "Syncing out code in: " + workspace.getName());
 		commands.clear();
-        commands.add(getDescriptor().getExecutable());
+    	commands.add(getDescriptor().getExecutable());
 		commands.add("sync");
 		commands.add("-d");
 		if (isCurrentBranch()) {
@@ -357,6 +370,10 @@ public class RepoScm extends SCM {
 		if (jobs != null && Integer.parseInt(jobs) > 0) {
 			commands.add("--jobs=" + convertParameter(env, jobs));
 		}
+        if (isKrepo()) {
+		    commands.clear();
+            commands.add("krepo2");
+        }
 		int returnCode =
 				launcher.launch().stdout(logger).pwd(workspace)
 						.cmds(commands).join();
