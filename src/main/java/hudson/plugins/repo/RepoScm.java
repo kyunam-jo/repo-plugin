@@ -27,6 +27,7 @@ import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
+import hudson.EnvVars;
 import hudson.model.BuildListener;
 import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
@@ -73,7 +74,7 @@ public class RepoScm extends SCM {
 	private final String manifestGroup;
 	private final String repoUrl;
 	private final String mirrorDir;
-	private final int jobs;
+	private final String jobs;
 	private final String localManifest;
 	private final String destinationDir;
 	private final boolean currentBranch;
@@ -129,7 +130,7 @@ public class RepoScm extends SCM {
 	 * Returns the number of jobs used for sync. By default, this is null and
 	 * repo does not use concurrent jobs.
 	 */
-	public int getJobs() {
+	public String getJobs() {
 		return jobs;
 	}
 
@@ -207,10 +208,12 @@ public class RepoScm extends SCM {
 	@DataBoundConstructor
 	public RepoScm(final String manifestRepositoryUrl,
 			final String manifestBranch, final String manifestFile,
-			final String manifestGroup, final String mirrorDir, final int jobs,
+			final String manifestGroup, final String mirrorDir,
+            final String jobs,
 			final String localManifest, final String destinationDir,
             final String repoUrl,
-			final boolean currentBranch, final boolean quiet) {
+			final boolean currentBranch, final boolean quiet
+        ) {
 		this.manifestRepositoryUrl = manifestRepositoryUrl;
 		this.manifestBranch = Util.fixEmptyAndTrim(manifestBranch);
 		this.manifestGroup = Util.fixEmptyAndTrim(manifestGroup);
@@ -221,7 +224,7 @@ public class RepoScm extends SCM {
 		this.destinationDir = Util.fixEmptyAndTrim(destinationDir);
 		this.currentBranch = currentBranch;
 		this.quiet = quiet;
-		this.repoUrl = Util.fixEmptyAndTrim(repoUrl);
+        this.repoUrl = Util.fixEmptyAndTrim(repoUrl);
 	}
 
 	@Override
@@ -243,9 +246,12 @@ public class RepoScm extends SCM {
 			final SCMRevisionState baseline) throws IOException,
 			InterruptedException {
 		SCMRevisionState myBaseline = baseline;
+
+        EnvVars env = project.getLastBuild().getEnvironment(listener);
+
 		if (myBaseline == null) {
 			// Probably the first build, or possibly an aborted build.
-			myBaseline = getLastState(project.getLastBuild());
+			myBaseline = getLastState(env, project.getLastBuild());
 			if (myBaseline == null) {
 				return PollingResult.BUILD_NOW;
 			}
@@ -253,7 +259,7 @@ public class RepoScm extends SCM {
 
 		FilePath repoDir;
 		if (destinationDir != null) {
-			repoDir = workspace.child(destinationDir);
+			repoDir = workspace.child(convertParameter(env, destinationDir));
 			if (!repoDir.isDirectory()) {
 				repoDir.mkdirs();
 			}
@@ -261,7 +267,7 @@ public class RepoScm extends SCM {
 			repoDir = workspace;
 		}
 
-		if (!checkoutCode(launcher, repoDir, listener.getLogger())) {
+		if (!checkoutCode(launcher, repoDir, listener.getLogger(), env)) {
 			// Some error occurred, try a build now so it gets logged.
 			return new PollingResult(myBaseline, myBaseline,
 					Change.INCOMPARABLE);
@@ -269,7 +275,8 @@ public class RepoScm extends SCM {
 
 		final RevisionState currentState =
 				new RevisionState(getStaticManifest(launcher, repoDir,
-						listener.getLogger()), manifestBranch,
+						listener.getLogger()),
+                        convertParameter(env, manifestBranch),
 						listener.getLogger());
 		final Change change;
 		if (currentState.equals(myBaseline)) {
@@ -288,8 +295,10 @@ public class RepoScm extends SCM {
 			throws IOException, InterruptedException {
 
 		FilePath repoDir;
+        EnvVars env = build.getEnvironment(listener);
+
 		if (destinationDir != null) {
-			repoDir = workspace.child(destinationDir);
+			repoDir = workspace.child(convertParameter(env, destinationDir));
 			if (!repoDir.isDirectory()) {
 				repoDir.mkdirs();
 			}
@@ -297,17 +306,18 @@ public class RepoScm extends SCM {
 			repoDir = workspace;
 		}
 
-		if (!checkoutCode(launcher, repoDir, listener.getLogger())) {
+		if (!checkoutCode(launcher, repoDir, listener.getLogger(), env)) {
 			return false;
 		}
 		final String manifest =
 				getStaticManifest(launcher, repoDir, listener.getLogger());
 		final RevisionState currentState =
-				new RevisionState(manifest, manifestBranch,
+				new RevisionState(manifest,
+                        convertParameter(env, manifestBranch),
 						listener.getLogger());
 		build.addAction(currentState);
 		final RevisionState previousState =
-				getLastState(build.getPreviousBuild());
+				getLastState(env, build.getPreviousBuild());
 
 		ChangeLog.saveChangeLog(currentState, previousState, changelogFile,
 				launcher, repoDir);
@@ -315,13 +325,27 @@ public class RepoScm extends SCM {
 		return true;
 	}
 
+    private String convertParameter(final EnvVars env, final String param) {
+        if (env == null) {
+            return param;
+        } else {
+            if (param.startsWith("$")) {
+                return Util.replaceMacro(param, env);
+            } else {
+                return param;
+            }
+        }
+    }
+
+
 	private int doSync(final Launcher launcher, final FilePath workspace,
-			final OutputStream logger)
+			final OutputStream logger, final EnvVars env)
 		throws IOException, InterruptedException {
 		final List<String> commands = new ArrayList<String>(4);
+        String value;
 		debug.log(Level.FINE, "Syncing out code in: " + workspace.getName());
 		commands.clear();
-		commands.add(getDescriptor().getExecutable());
+        commands.add(getDescriptor().getExecutable());
 		commands.add("sync");
 		commands.add("-d");
 		if (isCurrentBranch()) {
@@ -330,8 +354,8 @@ public class RepoScm extends SCM {
 		if (isQuiet()) {
 			commands.add("-q");
 		}
-		if (jobs > 0) {
-			commands.add("--jobs=" + jobs);
+		if (jobs != null && Integer.parseInt(jobs) > 0) {
+			commands.add("--jobs=" + convertParameter(env, jobs));
 		}
 		int returnCode =
 				launcher.launch().stdout(logger).pwd(workspace)
@@ -340,34 +364,36 @@ public class RepoScm extends SCM {
 	}
 
 	private boolean checkoutCode(final Launcher launcher,
-			final FilePath workspace, final OutputStream logger)
+			final FilePath workspace, final OutputStream logger,
+            final EnvVars env)
 			throws IOException, InterruptedException {
 		final List<String> commands = new ArrayList<String>(4);
-
+        String value;
 		debug.log(Level.INFO, "Checking out code in: " + workspace.getName());
 
 		commands.add(getDescriptor().getExecutable());
 		commands.add("init");
 		commands.add("-u");
+
 		commands.add(manifestRepositoryUrl);
 		if (manifestBranch != null) {
 			commands.add("-b");
-			commands.add(manifestBranch);
+			commands.add(convertParameter(env, manifestBranch));
 		}
 		if (manifestFile != null) {
 			commands.add("-m");
-			commands.add(manifestFile);
+			commands.add(convertParameter(env, manifestFile));
 		}
 		if (mirrorDir != null) {
-			commands.add("--reference=" + mirrorDir);
+			commands.add("--reference=" + convertParameter(env, mirrorDir));
 		}
 		if (repoUrl != null) {
-			commands.add("--repo-url=" + repoUrl);
+			commands.add("--repo-url=" + convertParameter(env, repoUrl));
 			commands.add("--no-repo-verify");
 		}
 		if (manifestGroup != null) {
 			commands.add("-g");
-			commands.add(manifestGroup);
+			commands.add(convertParameter(env, manifestGroup));
 		}
 		int returnCode =
 				launcher.launch().stdout(logger).pwd(workspace)
@@ -380,16 +406,17 @@ public class RepoScm extends SCM {
 			FilePath lm = rdir.child("local_manifest.xml");
 			lm.delete();
 			if (localManifest != null) {
-				if (localManifest.startsWith("<?xml")) {
-					lm.write(localManifest, null);
+                String tempManifest = convertParameter(env, localManifest);
+				if (tempManifest.startsWith("<?xml")) {
+					lm.write(tempManifest, null);
 				} else {
-					URL url = new URL(localManifest);
+					URL url = new URL(tempManifest);
 					lm.copyFrom(url);
 				}
 			}
 		}
 
-		returnCode = doSync(launcher, workspace, logger);
+		returnCode = doSync(launcher, workspace, logger, env);
 		if (returnCode != 0) {
 			debug.log(Level.WARNING, "Sync failed. Resetting repository");
 			commands.clear();
@@ -399,7 +426,7 @@ public class RepoScm extends SCM {
 			commands.add("git reset --hard");
 			launcher.launch().stdout(logger).pwd(workspace).cmds(commands)
 				.join();
-			returnCode = doSync(launcher, workspace, logger);
+			returnCode = doSync(launcher, workspace, logger, env);
 			if (returnCode != 0) {
 				return false;
 			}
@@ -425,16 +452,18 @@ public class RepoScm extends SCM {
 		return manifestText;
 	}
 
-	private RevisionState getLastState(final Run<?, ?> lastBuild) {
+	private RevisionState getLastState(final EnvVars env,
+            final Run<?, ?> lastBuild) {
 		if (lastBuild == null) {
 			return null;
 		}
 		final RevisionState lastState =
 				lastBuild.getAction(RevisionState.class);
-		if (lastState != null && lastState.getBranch() == manifestBranch) {
+		if (lastState != null && lastState.getBranch()
+            == convertParameter(env, manifestBranch)) {
 			return lastState;
 		}
-		return getLastState(lastBuild.getPreviousBuild());
+		return getLastState(env, lastBuild.getPreviousBuild());
 	}
 
 	@Override
