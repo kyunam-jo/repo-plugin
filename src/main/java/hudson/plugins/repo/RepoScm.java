@@ -67,6 +67,7 @@ public class RepoScm extends SCM {
 			.getLogger("hudson.plugins.repo.RepoScm");
 
 	private final String manifestRepositoryUrl;
+	private final boolean krepo;
 
 	// Advanced Fields:
 	private final String manifestBranch;
@@ -77,9 +78,9 @@ public class RepoScm extends SCM {
 	private final String jobs;
 	private final String localManifest;
 	private final String destinationDir;
+	private final String targetProjects;
 	private final boolean currentBranch;
 	private final boolean quiet;
-	private final boolean krepo;
 
 	/**
 	 * Returns the manifest repository URL.
@@ -152,6 +153,14 @@ public class RepoScm extends SCM {
 	}
 
 	/**
+	 * Returns the some target projects. By default, this is null and the
+	 * source is fully synced.
+	 */
+	public String getTargetProjects() {
+		return targetProjects;
+	}
+
+	/**
 	 * Returns the value of currentBranch.
 	 */
 	public boolean isCurrentBranch() {
@@ -203,6 +212,8 @@ public class RepoScm extends SCM {
 	 * @param destinationDir
 	 *            If not null then the source is synced to the destinationDir
 	 *            subdirectory of the workspace.
+	 * @param targetProjects
+	 *            If not null then the source is synced only specific projects
 	 * @param repoUrl
 	 *            If not null then use this url as repo base,
      *            instead of the default
@@ -222,7 +233,7 @@ public class RepoScm extends SCM {
 			final String manifestGroup, final String mirrorDir,
             final String jobs,
 			final String localManifest, final String destinationDir,
-            final String repoUrl,
+            final String repoUrl, final String targetProjects,
 			final boolean currentBranch, final boolean quiet,
             final boolean krepo
         ) {
@@ -231,10 +242,11 @@ public class RepoScm extends SCM {
 		this.manifestGroup = Util.fixEmptyAndTrim(manifestGroup);
 		this.manifestFile = Util.fixEmptyAndTrim(manifestFile);
 		this.mirrorDir = Util.fixEmptyAndTrim(mirrorDir);
-		this.jobs = jobs;
+		this.jobs = Util.fixEmptyAndTrim(jobs);
 		this.localManifest = Util.fixEmptyAndTrim(localManifest);
 		this.destinationDir = Util.fixEmptyAndTrim(destinationDir);
 		this.currentBranch = currentBranch;
+        this.targetProjects = Util.fixEmptyAndTrim(targetProjects);
 		this.quiet = quiet;
         this.repoUrl = Util.fixEmptyAndTrim(repoUrl);
         this.krepo = krepo;
@@ -309,6 +321,7 @@ public class RepoScm extends SCM {
 
 		FilePath repoDir;
         EnvVars env = build.getEnvironment(listener);
+		debug.log(Level.INFO, "This is checkout");
 
 		if (destinationDir != null) {
 			repoDir = workspace.child(convertParameter(env, destinationDir));
@@ -339,7 +352,7 @@ public class RepoScm extends SCM {
 	}
 
     private String convertParameter(final EnvVars env, final String param) {
-        if (env == null) {
+        if (env == null || param == null) {
             return param;
         } else {
             if (param.startsWith("$")) {
@@ -355,10 +368,9 @@ public class RepoScm extends SCM {
 			final OutputStream logger, final EnvVars env)
 		throws IOException, InterruptedException {
 		final List<String> commands = new ArrayList<String>(4);
-        String value;
 		debug.log(Level.FINE, "Syncing out code in: " + workspace.getName());
 		commands.clear();
-    	commands.add(getDescriptor().getExecutable());
+		commands.add(getDescriptor().getExecutable());
 		commands.add("sync");
 		commands.add("-d");
 		if (isCurrentBranch()) {
@@ -370,6 +382,17 @@ public class RepoScm extends SCM {
 		if (jobs != null && Integer.parseInt(jobs) > 0) {
 			commands.add("--jobs=" + convertParameter(env, jobs));
 		}
+		String convertedProjects = convertParameter(env, targetProjects);
+		debug.log(Level.INFO, "Target Project is " + convertedProjects);
+		debug.log(Level.INFO, "Target Project is NULL : "
+				+ !(convertedProjects == null));
+		debug.log(Level.INFO, "Target Project is empty : "
+				+ !convertedProjects.equals(""));
+        if (convertedProjects != null && !convertedProjects.equals("")) {
+            for (String project : convertedProjects.split("\\s+")) {
+                commands.add(project);
+            }
+        }
         if (isKrepo()) {
 		    commands.clear();
             commands.add("krepo2");
@@ -385,14 +408,14 @@ public class RepoScm extends SCM {
             final EnvVars env)
 			throws IOException, InterruptedException {
 		final List<String> commands = new ArrayList<String>(4);
-        String value;
+
 		debug.log(Level.INFO, "Checking out code in: " + workspace.getName());
 
 		commands.add(getDescriptor().getExecutable());
 		commands.add("init");
 		commands.add("-u");
 
-		commands.add(manifestRepositoryUrl);
+		commands.add(convertParameter(env, manifestRepositoryUrl));
 		if (manifestBranch != null) {
 			commands.add("-b");
 			commands.add(convertParameter(env, manifestBranch));

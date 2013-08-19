@@ -11,7 +11,7 @@
 		<f:textbox name="repo.manifestRepositoryUrl" value="${scm.manifestRepositoryUrl}"/>
 	</f:entry>
 
-	<f:entry title="Use krepo2 script" help="/plugin/repo/help-repo.html">
+	<f:entry title="Use krepo2 script" help="/plugin/repo/help-krepo.html">
         <f:checkbox name="repo.krepo" checked="${h.defaultToFalse(scm.krepo)}" />
 	</f:entry>
 
@@ -43,6 +43,10 @@
 
 		<f:entry title="Jobs" help="/plugin/repo/help-jobs.html">
 			<f:textbox name="repo.jobs" value="${scm.jobs}" />
+		</f:entry>
+
+		<f:entry title="Target Projects" help="/plugin/repo/help-targetProjects.html">
+			<f:textbox name="repo.targetProjects" value="${scm.targetProjects}" />
 		</f:entry>
 
 		<f:entry title="Current Branch" help="/plugin/repo/help-currentBranch.html">
