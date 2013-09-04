@@ -383,11 +383,6 @@ public class RepoScm extends SCM {
 			commands.add("--jobs=" + convertParameter(env, jobs));
 		}
 		String convertedProjects = convertParameter(env, targetProjects);
-		debug.log(Level.INFO, "Target Project is " + convertedProjects);
-		debug.log(Level.INFO, "Target Project is NULL : "
-				+ !(convertedProjects == null));
-		debug.log(Level.INFO, "Target Project is empty : "
-				+ !convertedProjects.equals(""));
         if (convertedProjects != null && !convertedProjects.equals("")) {
             for (String project : convertedProjects.split("\\s+")) {
                 commands.add(project);
