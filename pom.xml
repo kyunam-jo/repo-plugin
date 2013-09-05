@@ -114,9 +114,9 @@
   </distributionManagement>
   
   <scm>
-    <connection>scm:git:git://github.com/jenkinsci/repo-plugin.git</connection>
-    <developerConnection>scm:git:git@github.com:jenkinsci/repo-plugin.git</developerConnection>
-    <url>http://github.com/jenkinsci/repo-plugin</url>
+    <connection>scm:git:git://github.com/kyunam-jo/repo-plugin.git</connection>
+    <developerConnection>scm:git:git@github.com:kyunam-jo/repo-plugin.git</developerConnection>
+    <url>http://github.com/kyunam-jo/repo-plugin</url>
   </scm>
 
 
